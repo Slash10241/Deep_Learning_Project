@@ -1,7 +1,7 @@
 [project]
-name = "engine"
+name = "torch"
 version = "0.1.0"
-description = "Django backend for search project"
+description = "pytorch training environment"
 requires-python = ">=3.13"
 dependencies = [
     "numpy",
@@ -13,9 +13,4 @@ dependencies = [
     "tqdm",
     "ipykernel",
     "jupyter"
-]
-
-[project.optional-dependencies]
-dev = [
-    "django-extensions",
 ]
