@@ -1,0 +1,21 @@
+[project]
+name = "engine"
+version = "0.1.0"
+description = "Django backend for search project"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy",
+    "torch",
+    "matplotlib",
+    "torchvision",
+    "timm",
+    "pandas",
+    "tqdm",
+    "ipykernel",
+    "jupyter"
+]
+
+[project.optional-dependencies]
+dev = [
+    "django-extensions",
+]
