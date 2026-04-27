@@ -1,5 +1,5 @@
 [project]
-name = "torch"
+name = "torch-env"
 version = "0.1.0"
 description = "pytorch training environment"
 requires-python = ">=3.13"
