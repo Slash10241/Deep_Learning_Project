@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from typing import Dict, Optional
+from tqdm import tqdm
 
 class TrainingEngine:
     """
@@ -83,126 +84,147 @@ class TrainingEngine:
         """
         self.network.train()
         self._clear_trackers()
-
-        total_batches = len(self.data_iterator)
-        
+ 
         amp_device_type = 'cuda' if self.compute_device.type == 'cuda' else 'cpu'
-
-        for step_idx, (x_batch, y_batch) in enumerate(self.data_iterator):
+ 
+        pbar = tqdm(
+            self.data_iterator,
+            desc=f"[Epoch {epoch_num:03d}] Train",
+            unit="batch",
+            dynamic_ncols=True,
+            colour="green",
+        )
+ 
+        for step_idx, (x_batch, y_batch) in enumerate(pbar):
             x_batch = x_batch.to(self.compute_device, non_blocking=True)
             y_batch = y_batch.to(self.compute_device, non_blocking=True)
-
+ 
             self.opt.zero_grad(set_to_none=True)
-
+ 
             with torch.autocast(device_type=amp_device_type, enabled=self.compute_device.type == 'cuda'):
                 preds_raw = self.network(x_batch)
                 batch_loss = self.loss_fn(preds_raw, y_batch)
-
+ 
             self.grad_scaler.scale(batch_loss).backward()
             scale_before = self.grad_scaler.get_scale()
             self.grad_scaler.step(self.opt)
             self.grad_scaler.update()
-
             scale_after = self.grad_scaler.get_scale()
-
+ 
             if self.scheduler is not None:
                 if scale_before <= scale_after:
                     self.scheduler.step()
                 else:
-                    print("Error: Gradient overflow")
-
+                    tqdm.write("Warning: Gradient overflow — scheduler step skipped.")
+ 
             self._accumulate_stats(batch_loss, preds_raw, y_batch)
-
+ 
+            # update progress bar with running stats
+            current_stats = self._calculate_epoch_stats()
+            pbar.set_postfix(
+                loss=f"{current_stats['epoch_loss']:.4f}",
+                acc=f"{current_stats['epoch_acc']*100:.2f}%",
+            )
+ 
             if print_freq and (step_idx + 1) % print_freq == 0:
-                current_stats = self._calculate_epoch_stats()
-                print(
-                    f"[Epoch {epoch_num:03d}] "
-                    f"Step {step_idx + 1:04d}/{total_batches:04d} | "
+                tqdm.write(
+                    f"  [Epoch {epoch_num:03d}] "
+                    f"Step {step_idx + 1:04d}/{len(pbar):04d} | "
                     f"loss={current_stats['epoch_loss']:.4f} | "
                     f"acc={current_stats['epoch_acc']:.4f}"
                 )
-
+ 
         final_stats = self._calculate_epoch_stats()
-        print(
+        tqdm.write(
             f"[Epoch {epoch_num:03d}] COMPLETED | "
             f"avg_loss={final_stats['epoch_loss']:.4f} | "
             f"avg_acc={final_stats['epoch_acc']:.4f}"
         )
         return final_stats
-    
+ 
     @torch.inference_mode()
     def evaluate(
         self,
         inference_loader: DataLoader,
         phase_label: str = "Validation",
-) -> Dict[str, float]:
+    ) -> Dict[str, float]:
         """
         Runs a gradient-free evaluation pass over the dataset.
-
-        Computes running loss and accuracy, plus Macro Precision, Recall, F1 computed once at the end of the
-        epoch over the full set of predictions. This is appropriate for imbalanced datasets (just like ours: Oxford-IIIT Pets).
+ 
+        Computes running loss and accuracy, plus Macro Precision, Recall, F1
+        computed once at the end of the epoch over the full set of predictions.
         """
         from sklearn.metrics import precision_recall_fscore_support
-
+ 
         self.network.eval()
         self._clear_trackers()
-
+ 
         hardware_backend = 'cuda' if self.compute_device.type == 'cuda' else 'cpu'
-        is_cuda_active = (hardware_backend == 'cuda')
-        amp_context = torch.autocast(device_type=hardware_backend, enabled=is_cuda_active)
-
-        all_preds: list[torch.Tensor] = []
+        is_cuda_active   = (hardware_backend == 'cuda')
+        amp_context      = torch.autocast(device_type=hardware_backend, enabled=is_cuda_active)
+ 
+        all_preds:   list[torch.Tensor] = []
         all_targets: list[torch.Tensor] = []
-
-        for features, targets in inference_loader:
-
+ 
+        pbar = tqdm(
+            inference_loader,
+            desc=f"[{phase_label.capitalize()}]      ",
+            unit="batch",
+            dynamic_ncols=True,
+            colour="blue",
+        )
+ 
+        for features, targets in pbar:
             features = features.to(
                 device=self.compute_device,
                 memory_format=torch.channels_last,
                 non_blocking=True,
-        )
+            )
             targets = targets.to(device=self.compute_device, non_blocking=True)
-
+ 
             with amp_context:
-                logits = self.network(features)
+                logits    = self.network(features)
                 step_cost = self.loss_fn(logits, targets)
-
+ 
             self._accumulate_stats(step_cost, logits, targets)
-
  
             batch_preds = logits.argmax(dim=-1).detach().cpu()
-
-            if targets.ndim > 1:
-                batch_targets = targets.argmax(dim=-1).detach().cpu()
-            else:
-                batch_targets = targets.detach().cpu()
-
+            batch_targets = (
+                targets.argmax(dim=-1).detach().cpu()
+                if targets.ndim > 1
+                else targets.detach().cpu()
+            )
             all_preds.append(batch_preds)
             all_targets.append(batch_targets)
-
+ 
+            current_stats = self._calculate_epoch_stats()
+            pbar.set_postfix(
+                loss=f"{current_stats['epoch_loss']:.4f}",
+                acc=f"{current_stats['epoch_acc']*100:.2f}%",
+            )
+ 
         phase_results = self._calculate_epoch_stats()
-
+ 
         y_pred = torch.cat(all_preds).numpy()
         y_true = torch.cat(all_targets).numpy()
-
+ 
         macro_precision, macro_recall, macro_f1, _ = precision_recall_fscore_support(
-            y_true,
-            y_pred,
+            y_true, y_pred,
             average='macro',
             zero_division=0,
-    )
-
+        )
+ 
         phase_results["macro_precision"] = float(macro_precision)
-        phase_results["macro_recall"] = float(macro_recall)
-        phase_results["macro_f1"] = float(macro_f1)
-
-        print(
+        phase_results["macro_recall"]    = float(macro_recall)
+        phase_results["macro_f1"]        = float(macro_f1)
+ 
+        tqdm.write(
             f"[{phase_label.upper()}] metrics | "
             f"Mean Loss: {phase_results['epoch_loss']:.4f} | "
             f"Accuracy: {phase_results['epoch_acc'] * 100:.2f}% | "
             f"Macro F1: {phase_results['macro_f1'] * 100:.2f}% | "
-            f"Macro P: {phase_results['macro_precision'] * 100:.2f}% | "
-            f"Macro R: {phase_results['macro_recall'] * 100:.2f}%"
-    )
-
-        return phase_results      
+            f"Macro P:  {phase_results['macro_precision'] * 100:.2f}% | "
+            f"Macro R:  {phase_results['macro_recall'] * 100:.2f}%"
+        )
+ 
+        return phase_results
