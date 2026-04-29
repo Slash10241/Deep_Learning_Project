@@ -2,15 +2,28 @@
 name = "torch-env"
 version = "0.1.0"
 description = "pytorch training environment"
-requires-python = ">=3.13"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy",
+    "torchinfo",
     "torch",
-    "matplotlib",
     "torchvision",
+    "torchaudio",
+    "matplotlib",
     "timm",
     "pandas",
     "tqdm",
+    "scikit-learn",
     "ipykernel",
     "jupyter"
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
