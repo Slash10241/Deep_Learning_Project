@@ -45,10 +45,17 @@ class AugmentedMinorityDataset(torch.utils.data.Dataset):
 
 
 def make_weighted_sampler(dataset):
-    labels = np.array([dataset[i][1] for i in range(len(dataset))])
+    labels = []
+    for i in range(len(dataset)):
+        label = dataset[i][1]
+        if isinstance(label, tuple):
+            labels.append(label[0].item() if hasattr(label[0], "item") else label[0])
+        else:
+            labels.append(label.item() if hasattr(label, "item") else label)
+
+    labels = np.array(labels)
     class_counts = np.bincount(labels)
     class_weights = 1.0 / class_counts
-
     sample_weights = class_weights[labels]
     sample_weights = torch.DoubleTensor(sample_weights)
 

@@ -24,32 +24,32 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-
-
-NUM_BREEDS  = 37
+NUM_BREEDS = 37
 NUM_SPECIES = 2  # 0 = Cat, 1 = Dog
 
 # ImageNet stats — standard for pretrained ViT / ResNet fine-tuning
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
-_IMAGENET_STD  = (0.229, 0.224, 0.225)
-
+_IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
 def get_train_transform(image_size: int = 224) -> transforms.Compose:
-    return transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
-    ])
+    return transforms.Compose(
+        [
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
+        ]
+    )
 
 
 def get_eval_transform(image_size: int = 224) -> transforms.Compose:
-    return transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
-    ])
-
+    return transforms.Compose(
+        [
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
+        ]
+    )
 
 
 def _parse_annotation_file(filepath: str) -> list[dict]:
@@ -68,17 +68,17 @@ def _parse_annotation_file(filepath: str) -> list[dict]:
                 continue
 
             image_name = parts[0]
-            class_id   = int(parts[1])
+            class_id = int(parts[1])
             species_id = int(parts[2])
 
-            records.append({
-                "image_name": image_name,
-                "breed":   class_id - 1,
-                "species": species_id - 1,
-            })
+            records.append(
+                {
+                    "image_name": image_name,
+                    "breed": class_id - 1,
+                    "species": species_id - 1,
+                }
+            )
     return records
-
-
 
 
 class CreateDataset(Dataset):
@@ -98,15 +98,17 @@ class CreateDataset(Dataset):
         transform: Optional[transforms.Compose] = None,
         one_hot: bool = False,
     ) -> None:
-        self.records    = records
+        self.records = records
         self.images_dir = Path(images_dir)
-        self.transform  = transform or get_eval_transform()
-        self.one_hot    = one_hot
+        self.transform = transform or get_eval_transform()
+        self.one_hot = one_hot
 
     def __len__(self) -> int:
         return len(self.records)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         record = self.records[idx]
 
         # load image
@@ -116,17 +118,16 @@ class CreateDataset(Dataset):
 
         # build labels
         species_idx = torch.tensor(record["species"], dtype=torch.long)
-        breed_idx   = torch.tensor(record["breed"],   dtype=torch.long)
+        breed_idx = torch.tensor(record["breed"], dtype=torch.long)
 
         if self.one_hot:
             y1 = F.one_hot(species_idx, num_classes=NUM_SPECIES).float()  # (2,)
-            y2 = F.one_hot(breed_idx,   num_classes=NUM_BREEDS).float()   # (37,)
+            y2 = F.one_hot(breed_idx, num_classes=NUM_BREEDS).float()  # (37,)
         else:
-            y1 = species_idx   # scalar long tensor
-            y2 = breed_idx     # scalar long tensor
+            y1 = species_idx  # scalar long tensor
+            y2 = breed_idx  # scalar long tensor
 
         return image, (y1, y2)
-
 
 
 def _pet_collate(batch):
@@ -135,10 +136,9 @@ def _pet_collate(batch):
     (images_batch, (y1_batch, y2_batch)).
     """
     images = torch.stack([item[0] for item in batch])
-    y1     = torch.stack([item[1][0] for item in batch])
-    y2     = torch.stack([item[1][1] for item in batch])
+    y1 = torch.stack([item[1][0] for item in batch])
+    y2 = torch.stack([item[1][1] for item in batch])
     return images, (y1, y2)
-
 
 
 def build_dataloaders(
@@ -173,10 +173,10 @@ def build_dataloaders(
     if not 0.0 < val_split < 1.0:
         raise ValueError(f"val_split must be in (0, 1), got {val_split}")
 
-    root         = Path(dataset_root)
-    images_dir   = root / "images"
+    root = Path(dataset_root)
+    images_dir = root / "images"
     trainval_txt = root / "annotations" / "trainval.txt"
-    test_txt     = root / "annotations" / "test.txt"
+    test_txt = root / "annotations" / "test.txt"
 
     for p in [images_dir, trainval_txt, test_txt]:
         if not p.exists():
@@ -184,17 +184,17 @@ def build_dataloaders(
 
     # --- parse annotation files ---
     trainval_records = _parse_annotation_file(str(trainval_txt))
-    test_records     = _parse_annotation_file(str(test_txt))
+    test_records = _parse_annotation_file(str(test_txt))
 
     # --- reproducible train / val split ---
     rng = random.Random(seed)
     rng.shuffle(trainval_records)
 
-    n_val   = int(len(trainval_records) * val_split)
+    n_val = int(len(trainval_records) * val_split)
     n_train = len(trainval_records) - n_val
 
     train_records = trainval_records[:n_train]
-    val_records   = trainval_records[n_train:]
+    val_records = trainval_records[n_train:]
 
     print(
         f"Dataset split — "
@@ -210,17 +210,20 @@ def build_dataloaders(
 
     # --- datasets ---
     train_dataset = CreateDataset(
-        train_records, images_dir,
+        train_records,
+        images_dir,
         transform=get_train_transform(image_size),
         one_hot=one_hot,
     )
     val_dataset = CreateDataset(
-        val_records, images_dir,
+        val_records,
+        images_dir,
         transform=get_eval_transform(image_size),
         one_hot=one_hot,
     )
     test_dataset = CreateDataset(
-        test_records, images_dir,
+        test_records,
+        images_dir,
         transform=get_eval_transform(image_size),
         one_hot=one_hot,
     )
@@ -253,4 +256,3 @@ def build_dataloaders(
     )
 
     return train_loader, val_loader, test_loader
-

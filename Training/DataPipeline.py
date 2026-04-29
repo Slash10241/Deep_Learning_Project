@@ -1,14 +1,20 @@
 import os
 import random
+import sys
 from collections import Counter
+from pathlib import Path
 
+import ClassImbalance
 import numpy as np
 import torch
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import DataLoader, Subset, random_split
 from torchvision import datasets, transforms
 
-import ClassImbalance
+from DataLoader.DataLoader import CreateDataset, build_dataloaders
+
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 
 def get_stratified_subsets(dataset, subset_ratios=(1.0, 0.1, 0.01), random_state=42):
@@ -50,7 +56,7 @@ def create_cat_imbalanced_subset(train_dataset, cat_fraction=0.2, seed=42):
     Reduces cat samples to a fixed fraction while keeping all dog samples.
 
     Args:
-        train_dataset: OxfordIIITPet training dataset
+        train_dataset: CreateDataset instance with (image, (species, breed)) format
         cat_fraction: fraction of cat samples to keep (e.g., 0.2)
         seed: reproducibility
 
@@ -59,9 +65,11 @@ def create_cat_imbalanced_subset(train_dataset, cat_fraction=0.2, seed=42):
     """
     random.seed(seed)
     np.random.seed(seed)
-    labels = np.array([train_dataset.dataset[i][1] for i in train_dataset.indices])
-    cat_indices = np.where(labels < 12)[0]
-    dog_indices = np.where(labels >= 12)[0]
+    indices = list(range(len(train_dataset)))
+    labels = np.array([train_dataset[i][1][0].item() for i in indices])
+    cat_indices = np.where(labels == 0)[0]
+    dog_indices = np.where(labels == 1)[0]
+
     n_cats_keep = int(len(cat_indices) * cat_fraction)
     selected_cat_indices = np.random.choice(cat_indices, n_cats_keep, replace=False)
     final_indices = np.concatenate([selected_cat_indices, dog_indices])
@@ -70,60 +78,35 @@ def create_cat_imbalanced_subset(train_dataset, cat_fraction=0.2, seed=42):
     return Subset(train_dataset, final_indices)
 
 
-train_transform = transforms.Compose(
-    [
-        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5] * 3, [0.5] * 3),
-    ]
-)
-
-val_transform = transforms.Compose(
-    [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ]
-)
-
-
 def main():
-    data = datasets.OxfordIIITPet(
-        root="./", split="trainval", transform=None, download=False
-    )
-    test_data = datasets.OxfordIIITPet(
-        root="./", split="test", transform=val_transform, download=False
-    )
-    classes = data.classes
-    num_classes = len(classes)
+    dataset_root = "../oxford-iiit-pet"
     batch_size = 32
-    train_size = int(0.9 * len(data))
-    val_size = len(data) - train_size
-    train_indices, val_indices = random_split(range(len(data)), [train_size, val_size])
-    train_data = datasets.OxfordIIITPet(
-        root="./", split="trainval", transform=train_transform, download=False
+    train_loader, val_loader, test_loader = build_dataloaders(
+        dataset_root=dataset_root,
+        val_split=0.2,
+        batch_size=batch_size,
+        one_hot=False,
+        image_size=224,
+        num_workers=os.cpu_count(),
+        seed=42,
     )
-    val_data = datasets.OxfordIIITPet(
-        root="./", split="trainval", transform=val_transform, download=False
-    )
-    train_data = Subset(train_data, train_indices.indices)
-    val_data = Subset(val_data, val_indices.indices)
-    train_dataloader = DataLoader(
-        train_data, shuffle=True, batch_size=batch_size, num_workers=os.cpu_count()
-    )
-
-    imbalanced_train = create_cat_imbalanced_subset(train_data)
-    sampler = class_imbalance.make_weighted_sampler(imbalanced_train)
+    imbalanced_train = create_cat_imbalanced_subset(train_loader.dataset)
+    sampler = ClassImbalance.make_weighted_sampler(imbalanced_train)
     loader = DataLoader(imbalanced_train, batch_size=batch_size, sampler=sampler)
-
-    labels = [label for _, label in imbalanced_train]
+    labels = [
+        label[0].item() if hasattr(label[0], "item") else label[0]
+        for _, label in imbalanced_train
+    ]
     print("Original distribution:")
     print(Counter(labels))
     sampled_labels = []
-    for i, (_, labels) in enumerate(loader):
-        sampled_labels.extend(labels.tolist())
+    for i, (_, label_tuple) in enumerate(loader):
+        sampled_labels.extend(
+            label_tuple[0].tolist()
+            if hasattr(label_tuple[0], "tolist")
+            else label_tuple[0]
+        )
+
         if i >= 20:
             break
 
