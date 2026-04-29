@@ -1,0 +1,148 @@
+{
+    "fixed": {
+        "horizontal_flip":      true,
+        "rotation":             true,
+            "rotation_min_degrees": 0,
+            "rotation_max_degrees": 20,
+        "random_crop":          true,
+            "crop_scale":       [0.85, 1.0],
+            "crop_ratio":       [0.9, 1.1],
+        "grayscale":            true,
+            "grayscale_p":      0.05
+    },
+
+    "experiments": [
+        {
+            "name": "no_augs",
+            "override_fixed": {
+                "horizontal_flip": false,
+                "rotation": false,
+                "random_crop": false,
+                "grayscale": false
+            },
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "basic_augs",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "erasing_only_low_prob",
+            "random_erasing":   true,
+                "erasing_p":        0.2,
+                "erasing_scale":    [0.02, 0.10],
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "erasing_only_high_prob",
+            "random_erasing":   true,
+                "erasing_p":        0.5,
+                "erasing_scale":    [0.02, 0.10],
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "jitter_only",
+            "random_erasing":   false,
+            "color_jitter":     true,
+                "jitter_brightness": 0.3,
+                "jitter_contrast":   0.3,
+                "jitter_saturation": 0.2,
+                "jitter_hue":        0.05,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "mixup_only_low_alpha",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            true,
+                "mixup_alpha":      0.2,
+            "cutmix":           false,
+            "batch_aug_prob":   0.3
+        },
+        {
+            "name": "mixup_only_moderate_alpha",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            true,
+                "mixup_alpha":      0.4,
+            "cutmix":           false,
+            "batch_aug_prob":   0.3
+        },
+        {
+            "name": "cutmix_only_low_alpha",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           true,
+                "cutmix_alpha":     0.5,
+            "batch_aug_prob":   0.3
+        },
+                {
+            "name": "cutmix_only_moderate_alpha",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           true,
+                "cutmix_alpha":     1.0,
+            "batch_aug_prob":   0.3
+        },
+        {
+            "name": "mixup_cutmix",
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            true,
+                "mixup_alpha":      0.4,
+            "cutmix":           true,
+                "cutmix_alpha":     1.0,
+            "batch_aug_prob":   0.3
+        },
+        {
+            "name": "erasing_jitter_mixup_cutmix_low_prob",
+            "random_erasing":   true,
+                "erasing_p":        0.2,
+                "erasing_scale":    [0.02, 0.08],
+            "color_jitter":     true,
+                "jitter_brightness": 0.2,
+                "jitter_contrast":   0.2,
+                "jitter_saturation": 0.1,
+                "jitter_hue":        0.02,
+            "mixup":            true,
+                "mixup_alpha":      0.2,
+            "cutmix":           true,
+                "cutmix_alpha":     0.5,
+            "batch_aug_prob":   0.2
+        },
+        {
+            "name": "erasing_jitter_mixup_cutmix_high_prob",
+            "random_erasing":   true,
+                "erasing_p":        0.3,
+                "erasing_scale":    [0.02, 0.10],
+            "color_jitter":     true,
+                "jitter_brightness": 0.3,
+                "jitter_contrast":   0.3,
+                "jitter_saturation": 0.2,
+                "jitter_hue":        0.05,
+            "mixup":            true,
+                "mixup_alpha":      0.4,
+            "cutmix":           true,
+                "cutmix_alpha":     1.0,
+            "batch_aug_prob":   0.5
+        }
+    ]
+}
