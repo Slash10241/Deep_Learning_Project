@@ -19,6 +19,7 @@ class TrainingEngine:
         opt: torch.optim.Optimizer,#The optimizer updating the network weights.
         compute_device: torch.device,#The hardware device (cuda or cpu).
         scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,#(Optional) Learning rate scheduler for step decay.
+        batch_aug: Optional[object] = None,#for cutmix / mixup
     ) -> None:
         
         self.network = network.to(compute_device)
@@ -27,6 +28,7 @@ class TrainingEngine:
         self.opt = opt
         self.compute_device = compute_device
         self.scheduler = scheduler
+        self.batch_aug = batch_aug
         
         amp_device_str = 'cuda' if self.compute_device.type == 'cuda' else 'cpu'
         self.grad_scaler = torch.amp.GradScaler(
@@ -98,6 +100,9 @@ class TrainingEngine:
         for step_idx, (x_batch, y_batch) in enumerate(pbar):
             x_batch = x_batch.to(self.compute_device, non_blocking=True)
             y_batch = y_batch.to(self.compute_device, non_blocking=True)
+
+            if self.batch_aug is not None:
+                x_batch, y_batch = self.batch_aug(x_batch, y_batch)
  
             self.opt.zero_grad(set_to_none=True)
  
