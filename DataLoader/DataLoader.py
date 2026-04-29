@@ -17,6 +17,7 @@ import os
 import random
 from pathlib import Path
 from typing import Literal, Optional, Tuple
+import numpy as np
 
 import torch
 import torch.nn.functional as F
@@ -31,16 +32,121 @@ NUM_SPECIES = 2  # 0 = Cat, 1 = Dog
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
 
+class BatchAugmenter:
+    """
+    Applies CutMix and/or MixUp at the batch level.
+    Pass to the training loop after DataLoader yields a batch.
 
-def get_train_transform(image_size: int = 224) -> transforms.Compose:
-    return transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
-        ]
-    )
+    Args:
+        augs : same AUGMENTATIONS dict used for get_train_transform
+        num_classes : number of output classes (for one-hot encoding)
+    """
+    def __init__(self, augs: dict, num_classes: int):
+        self.augs = augs
+        self.num_classes = num_classes
+        self.mixup_alpha  = augs.get("mixup_alpha",  0.4)
+        self.cutmix_alpha = augs.get("cutmix_alpha", 1.0)
 
+    def _to_onehot(self, labels: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.one_hot(labels, self.num_classes).float()
+
+    def _mixup(self, x, y):
+        lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
+        idx = torch.randperm(x.size(0))
+        x_mix = lam * x + (1 - lam) * x[idx]
+        y_mix = lam * self._to_onehot(y) + (1 - lam) * self._to_onehot(y[idx])
+        return x_mix, y_mix
+
+    def _cutmix(self, x, y):
+        lam = np.random.beta(self.cutmix_alpha, self.cutmix_alpha)
+        idx = torch.randperm(x.size(0))
+        _, _, H, W = x.shape
+
+        # bounding box
+        cut_ratio = np.sqrt(1 - lam)
+        cut_h = int(H * cut_ratio)
+        cut_w = int(W * cut_ratio)
+        cx = np.random.randint(W)
+        cy = np.random.randint(H)
+        x1 = np.clip(cx - cut_w // 2, 0, W)
+        x2 = np.clip(cx + cut_w // 2, 0, W)
+        y1 = np.clip(cy - cut_h // 2, 0, H)
+        y2 = np.clip(cy + cut_h // 2, 0, H)
+
+        x_mix = x.clone()
+        x_mix[:, :, y1:y2, x1:x2] = x[idx, :, y1:y2, x1:x2]
+
+        lam_actual = 1 - (y2 - y1) * (x2 - x1) / (H * W)
+        y_mix = lam_actual * self._to_onehot(y) + (1 - lam_actual) * self._to_onehot(y[idx])
+        return x_mix, y_mix
+
+    def __call__(self, x: torch.Tensor, y: torch.Tensor):
+        apply_p = self.augs.get("batch_aug_prob", 0.2)
+    
+        if np.random.rand() > apply_p:
+            return x, y
+    
+        do_mixup  = self.augs.get("mixup")
+        do_cutmix = self.augs.get("cutmix")
+    
+        if do_mixup and do_cutmix:
+            if np.random.rand() < 0.5:
+                return self._mixup(x, y)
+            else:
+                return self._cutmix(x, y)
+        elif do_mixup:
+            return self._mixup(x, y)
+        elif do_cutmix:
+            return self._cutmix(x, y)
+        else:
+            return x, y
+            
+
+def get_train_transform(augs: dict, image_size: int = 224) -> transforms.Compose:
+    pipeline = [transforms.Resize((256, 256))]
+
+    # ── geometric ────────────────────────────────────────────────────────────
+    if augs.get("horizontal_flip"):
+        pipeline.append(transforms.RandomHorizontalFlip(p=0.5))
+
+    if augs.get("rotation"):
+        min_deg = augs.get("rotation_min_degrees", 0)
+        max_deg = augs.get("rotation_max_degrees", 15)
+        pipeline.append(transforms.RandomRotation(degrees=(min_deg, max_deg)))
+
+    if augs.get("random_crop"):
+        pipeline.append(transforms.RandomResizedCrop(
+            image_size,
+            scale=augs.get("crop_scale", (0.85, 1.0)),
+            ratio=augs.get("crop_ratio", (0.9, 1.1)),
+        ))
+    else:
+        pipeline.append(transforms.Resize((image_size, image_size)))
+
+    # ── colour ───────────────────────────────────────────────────────────────
+    if augs.get("color_jitter"):
+        pipeline.append(transforms.ColorJitter(
+            brightness=augs.get("jitter_brightness", 0.3),
+            contrast=augs.get("jitter_contrast",   0.3),
+            saturation=augs.get("jitter_saturation", 0.2),
+            hue=augs.get("jitter_hue", 0.05),
+        ))
+
+    # ── regularisation ───────────────────────────────────────────────────────
+    if augs.get("grayscale"):
+        pipeline.append(transforms.RandomGrayscale(p=augs.get("grayscale_p", 0.05)))
+
+    pipeline.append(transforms.ToTensor())
+    pipeline.append(transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD))
+
+    if augs.get("random_erasing"):
+        pipeline.append(transforms.RandomErasing(
+            p=augs.get("erasing_p", 0.2),
+            scale=augs.get("erasing_scale", (0.02, 0.10)),
+        ))
+
+    return transforms.Compose(pipeline)
+    
 
 def get_eval_transform(image_size: int = 224) -> transforms.Compose:
     return transforms.Compose(
@@ -147,6 +253,7 @@ def build_dataloaders(
     batch_size: int = 32,
     one_hot: bool = False,
     image_size: int = 224,
+    augs: dict = {},
     num_workers: int = 4,
     seed: int = 42,
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
@@ -212,7 +319,7 @@ def build_dataloaders(
     train_dataset = CreateDataset(
         train_records,
         images_dir,
-        transform=get_train_transform(image_size),
+        transform=get_train_transform(augs,image_size),
         one_hot=one_hot,
     )
     val_dataset = CreateDataset(
