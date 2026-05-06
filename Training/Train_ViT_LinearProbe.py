@@ -44,7 +44,10 @@ ES_PATIENCE     = 6
 LABEL_MODE      = "breed"
 MODEL_NAME      = "vit_base_patch16_224"
 TRAINING_TYPE   = "Linear_Probe"
-CHECKPOINT_BASE = "../Checkpoints/"
+CHECKPOINT_ROOT = "../Checkpoints/"
+os.makedirs(CHECKPOINT_ROOT, exist_ok=True)
+CHECKPOINT_BASE = CHECKPOINT_ROOT+"vit_linear_probe/"
+os.makedirs(CHECKPOINT_BASE, exist_ok=True)
 NUM_CLASSES     = 37 if LABEL_MODE == "breed" else 2
 
 
@@ -162,7 +165,7 @@ def save_results_csv(results: dict, checkpoint_base: str):
 # ─────────────────────────────────────────────────────────────────────────────
 # EXPERIMENT LOOP
 # ─────────────────────────────────────────────────────────────────────────────
-os.makedirs(CHECKPOINT_BASE, exist_ok=True)
+
 
 for exp_idx, AUGMENTATIONS in enumerate(EXPERIMENTS):
     exp_name = AUGMENTATIONS["name"]
@@ -292,4 +295,4 @@ for exp_idx, AUGMENTATIONS in enumerate(EXPERIMENTS):
 
 print("\n" + "=" * 70)
 print(f"All {len(EXPERIMENTS)} experiments complete.")
-print(f"Results CSV : {os.path.join(CHECKPOINT_BASE, 'all_experiment_results.csv')}")
+print(f"Results CSV : {os.path.join(CHECKPOINT_BASE, TRAINING_TYPE+'_all_experiment_results.csv')}")
