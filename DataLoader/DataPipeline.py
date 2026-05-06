@@ -11,7 +11,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import DataLoader, Subset, random_split
 from torchvision import datasets, transforms
 
-from DataLoader.DataLoader import CreateDataset, build_dataloaders
+from DataLoader import CreateDataset, build_dataloaders
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
