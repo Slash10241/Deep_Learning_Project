@@ -5,3 +5,4 @@ __pycache__
 .venv
 Checkpoints
 uv.lock
+Training_Notebooks

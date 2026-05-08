@@ -49,12 +49,15 @@ def make_weighted_sampler(dataset):
     for i in range(len(dataset)):
         label = dataset[i][1]
         if isinstance(label, tuple):
-            labels.append(label[0].item() if hasattr(label[0], "item") else label[0])
+            # label[1] is the breed index (0-36); label[0] is species (0-1)
+            labels.append(label[1].item() if hasattr(label[1], "item") else label[1])
         else:
             labels.append(label.item() if hasattr(label, "item") else label)
 
     labels = np.array(labels)
-    class_counts = np.bincount(labels)
+    class_counts = np.bincount(labels, minlength=labels.max() + 1)
+    # Guard against any breed with zero samples
+    class_counts = np.where(class_counts == 0, 1, class_counts)
     class_weights = 1.0 / class_counts
     sample_weights = class_weights[labels]
     sample_weights = torch.DoubleTensor(sample_weights)

@@ -1,0 +1,46 @@
+{
+    "fixed": {
+        "horizontal_flip":      true,
+        "rotation":             true,
+            "rotation_min_degrees": 0,
+            "rotation_max_degrees": 20,
+        "random_crop":          true,
+            "crop_scale":       [0.85, 1.0],
+            "crop_ratio":       [0.9, 1.1],
+        "grayscale":            true,
+            "grayscale_p":      0.05
+    },
+
+    "experiments": [
+        {
+            "name": "no_augs",
+            "override_fixed": {
+                "horizontal_flip": false,
+                "rotation": false,
+                "random_crop": false,
+                "grayscale": false
+            },
+            "random_erasing":   false,
+            "color_jitter":     false,
+            "mixup":            false,
+            "cutmix":           false,
+            "batch_aug_prob":   0.0
+        },
+        {
+            "name": "basic_augs_rnd_erase_jitter",
+            "random_erasing":   true,
+                "erasing_p":        0.3,
+                "erasing_scale":    [0.02, 0.10],
+            "color_jitter":     true,
+                "jitter_brightness": 0.3,
+                "jitter_contrast":   0.3,
+                "jitter_saturation": 0.2,
+                "jitter_hue":        0.05,
+            "mixup":            false,
+                "mixup_alpha":      0.4,
+            "cutmix":           false,
+                "cutmix_alpha":     1.0,
+            "batch_aug_prob":   0.0
+        }
+    ]
+}

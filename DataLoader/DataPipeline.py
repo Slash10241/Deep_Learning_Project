@@ -54,10 +54,12 @@ def get_stratified_subsets(dataset, subset_ratios=(1.0, 0.1, 0.01), random_state
 def create_cat_imbalanced_subset(train_dataset, cat_fraction=0.2, seed=42):
     """
     Reduces cat samples to a fixed fraction while keeping all dog samples.
+    The fraction is applied per cat breed so each breed loses the same
+    proportion, rather than pooling all cats and sampling globally.
 
     Args:
         train_dataset: CreateDataset instance with (image, (species, breed)) format
-        cat_fraction: fraction of cat samples to keep (e.g., 0.2)
+        cat_fraction: fraction of cat samples to keep per breed (e.g., 0.2)
         seed: reproducibility
 
     Returns:
@@ -65,13 +67,24 @@ def create_cat_imbalanced_subset(train_dataset, cat_fraction=0.2, seed=42):
     """
     random.seed(seed)
     np.random.seed(seed)
-    indices = list(range(len(train_dataset)))
-    labels = np.array([train_dataset[i][1][0].item() for i in indices])
-    cat_indices = np.where(labels == 0)[0]
-    dog_indices = np.where(labels == 1)[0]
 
-    n_cats_keep = int(len(cat_indices) * cat_fraction)
-    selected_cat_indices = np.random.choice(cat_indices, n_cats_keep, replace=False)
+    n = len(train_dataset)
+    species_labels = np.array([train_dataset[i][1][0].item() for i in range(n)])
+    breed_labels   = np.array([train_dataset[i][1][1].item() for i in range(n)])
+
+    dog_indices = np.where(species_labels == 1)[0]
+
+    # For each cat breed, keep cat_fraction of its samples independently
+    cat_mask         = species_labels == 0
+    cat_breed_values = np.unique(breed_labels[cat_mask])
+    selected_cat_indices = []
+    for breed in cat_breed_values:
+        breed_indices = np.where((species_labels == 0) & (breed_labels == breed))[0]
+        n_keep = max(1, int(len(breed_indices) * cat_fraction))
+        chosen = np.random.choice(breed_indices, n_keep, replace=False)
+        selected_cat_indices.append(chosen)
+
+    selected_cat_indices = np.concatenate(selected_cat_indices)
     final_indices = np.concatenate([selected_cat_indices, dog_indices])
     np.random.shuffle(final_indices)
 
