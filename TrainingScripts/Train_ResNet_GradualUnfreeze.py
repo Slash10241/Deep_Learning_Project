@@ -12,13 +12,14 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
+sys.path.insert(0, "../Training")
 
 from DataLoader     import (BatchAugmenter, CreateDataset,
                              get_train_transform, get_eval_transform,
                              _parse_annotation_file, _pet_collate)
 from ClassImbalance import make_weighted_sampler
 from DataPipeline   import create_cat_imbalanced_subset
-from ViTFinetune    import ViTGradualUnfreeze
+from ResNetFinetune    import ResNetGradualUnfreeze
 from TrainingEngine import TrainingEngine
 
 import matplotlib
@@ -51,26 +52,20 @@ LR_FACTOR       = 0.1
 LR_MIN          = 1e-6
 ES_PATIENCE     = 6
 LABEL_MODE      = "breed"
-# MODEL_NAME      = "vit_base_patch16_224"
-# TRAINING_TYPE   = "Vit_Gradual_Unfreeze"
-# CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT, "vit_class_imbalance_gradual/")
-
+MODEL_NAME      = "resnet10t"
+TRAINING_TYPE   = "Gradual_Unfreeze"
 CHECKPOINT_ROOT = "../Checkpoints/"
-MODEL_NAME    = "vit_tiny_patch16_224"
-TRAINING_TYPE = "ViTTiny_Gradual_Baseline"
-CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT, "vit_tiny_baseline_full_finetune/")
-
 os.makedirs(CHECKPOINT_ROOT, exist_ok=True)
+CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT, "resnet_full_finetune_gradual_direct/")
 os.makedirs(CHECKPOINT_BASE, exist_ok=True)
 NUM_CLASSES     = 37 if LABEL_MODE == "breed" else 2
 CAT_FRACTION    = 1.0
-# STRATEGIES      = ["baseline", "weighted_ce", "oversampling"]
 STRATEGIES      = ["baseline"]
 
 # Fixed: 3 block groups
-NUM_BLOCKS   = 12
+NUM_BLOCKS   = 4
 HEAD_EPOCHS  = 20
-BLOCK_EPOCHS = 20
+BLOCK_EPOCHS = 30
 HEAD_LR      = 1e-3
 BLOCK_LR     = 1e-4
 
@@ -122,6 +117,20 @@ print(f"Total runs : {total_runs}")
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+class SmartCELoss(nn.Module):
+    def __init__(self, weight=None, smoothing_hard=0.1):
+        super().__init__()
+        self.weight         = weight
+        self.smoothing_hard = smoothing_hard
+
+    def forward(self, logits, labels):
+        smoothing = 0.0 if labels.ndim > 1 else self.smoothing_hard
+        return F.cross_entropy(
+            logits, labels,
+            weight=self.weight,
+            label_smoothing=smoothing,
+        )
+        
 class LabelSelector:
     def __init__(self, loader, mode):
         self.loader = loader
@@ -329,7 +338,7 @@ def save_run_csv(results: dict, checkpoint_dir: str):
 
 def save_master_csv(results: dict, checkpoint_base: str):
     csv_path    = os.path.join(checkpoint_base,
-                               "all_experiment_results_gradual_class_imbalance.csv")
+                               "all_experiment_results_gradual_direct_"+MODEL_NAME+".csv")
     file_exists = os.path.isfile(csv_path)
     with open(csv_path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=results.keys())
@@ -380,13 +389,11 @@ if __name__ == "__main__":
             test_selector  = LabelSelector(test_loader,  LABEL_MODE)
 
             if strategy == "weighted_ce":
-                class_weights = compute_class_weights(imbalanced_train, NUM_CLASSES, device)
-                loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
-                print(f"  Weighted CE: min={class_weights.min():.4f}  max={class_weights.max():.4f}")
+                loss_fn = SmartCELoss(weight=class_weights, smoothing_hard=0.1)
             else:
-                loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
-
-            model           = ViTGradualUnfreeze(num_classes=NUM_CLASSES, model_name=MODEL_NAME)
+                loss_fn = SmartCELoss(smoothing_hard=0.1)
+                
+            model           = ResNetGradualUnfreeze(num_classes=NUM_CLASSES, model_name=MODEL_NAME)
             batch_augmenter = BatchAugmenter(augs=AUGMENTATIONS, num_classes=NUM_CLASSES)
 
             early_stopping  = EarlyStopping(
@@ -412,12 +419,13 @@ if __name__ == "__main__":
                 is_last_phase = (phase_idx == LAST_PHASE_IDX)
 
                 if phase_idx > 0:
-                    block_to_unfreeze = total_blocks_vit - phase_idx
-                    if block_to_unfreeze >= 0:
+                    block_to_unfreeze = 5 - phase_idx
+                    if block_to_unfreeze >= 1:
                         model.unfreeze_next_block(block_to_unfreeze)
                         phase_boundaries.append(global_epoch)
                         print(f"\n  ▶ Unfroze block {block_to_unfreeze} "
                               f"(phase {phase_idx}/{LAST_PHASE_IDX})")
+
 
                 optimizer = torch.optim.Adam(
                     model.trainable_params(),
@@ -541,4 +549,4 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 70)
     print(f"All {total_runs} runs complete.")
-    print(f"Results CSV : {os.path.join(CHECKPOINT_BASE, 'all_experiment_results_gradual_class_imbalance.csv')}")
+    print(f"Results CSV : {os.path.join(CHECKPOINT_BASE, 'all_experiment_results_gradual.csv')}")

@@ -46,6 +46,7 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
+sys.path.insert(0, "../Training")
 
 from DataLoader          import (BatchAugmenter, CreateDataset,
                                   get_train_transform, get_eval_transform,
