@@ -42,7 +42,7 @@ def distillation_loss(
     student_feat:   torch.Tensor,   # (B, PROJ_DIM) — student projected CLS
     teacher_logits: torch.Tensor,   # (B, C)        — raw teacher logits
     teacher_feat:   torch.Tensor,   # (B, PROJ_DIM) — teacher projected CLS
-    labels:         torch.Tensor,   # (B,)          — hard integer labels
+    labels:         torch.Tensor,   # (B,) / (B,C)  - hard or one hot
     weights:        LossWeights = None,
 ) -> tuple[torch.Tensor, dict]:
     """
@@ -76,10 +76,11 @@ def distillation_loss(
     T = weights.temperature
 
     # ── L_CE ──────────────────────────────────────────────────────────────────
+    smoothing = 0.0 if labels.ndim > 1 else 0.1
     l_ce = F.cross_entropy(
         student_logits, labels,
         weight=weights.ce_class_weights,
-        label_smoothing=0.1,
+        label_smoothing=smoothing,
     )
 
     # ── L_KL ──────────────────────────────────────────────────────────────────
@@ -258,14 +259,10 @@ class DistillationEngine:
                 # Student train mode: returns (logits, feat_proj)
                 student_logits, student_feat = self.student(x_batch)
 
-                hard_labels = (
-                    y_batch.argmax(dim=-1) if y_batch.ndim > 1 else y_batch
-                )
-
                 batch_loss, loss_components = distillation_loss(
                     student_logits, student_feat,
                     teacher_logits, teacher_feat,
-                    hard_labels,
+                    y_batch,
                     weights=active_weights,
                 )
 

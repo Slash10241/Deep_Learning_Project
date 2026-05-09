@@ -8,6 +8,7 @@ from datetime import datetime
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
+sys.path.insert(0, "../Training")
 
 from DataLoader     import build_dataloaders, BatchAugmenter
 from ViTFinetune    import ViTLinearProbe

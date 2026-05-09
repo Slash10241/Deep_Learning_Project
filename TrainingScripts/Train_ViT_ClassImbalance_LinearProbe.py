@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
+sys.path.insert(0, "../Training")
 
 from DataLoader     import (BatchAugmenter, CreateDataset,
                              get_train_transform, get_eval_transform,
@@ -96,6 +97,20 @@ print(f"Total runs : {total_runs}")
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+class SmartCELoss(nn.Module):
+    def __init__(self, weight=None, smoothing_hard=0.1):
+        super().__init__()
+        self.weight         = weight
+        self.smoothing_hard = smoothing_hard
+
+    def forward(self, logits, labels):
+        smoothing = 0.0 if labels.ndim > 1 else self.smoothing_hard
+        return F.cross_entropy(
+            logits, labels,
+            weight=self.weight,
+            label_smoothing=smoothing,
+        )
+        
 class LabelSelector:
     def __init__(self, loader, mode):
         self.loader = loader
@@ -346,12 +361,12 @@ if __name__ == "__main__":
             val_selector   = LabelSelector(val_loader,   LABEL_MODE)
             test_selector  = LabelSelector(test_loader,  LABEL_MODE)
 
+
+
             if strategy == "weighted_ce":
-                class_weights = compute_class_weights(imbalanced_train, NUM_CLASSES, device)
-                loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
-                print(f"  Weighted CE: min={class_weights.min():.4f}  max={class_weights.max():.4f}")
+                loss_fn = SmartCELoss(weight=class_weights, smoothing_hard=0.1)
             else:
-                loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
+                loss_fn = SmartCELoss(smoothing_hard=0.1)
 
             model     = ViTLinearProbe(num_classes=NUM_CLASSES, model_name=MODEL_NAME)
             optimizer = torch.optim.Adam(
