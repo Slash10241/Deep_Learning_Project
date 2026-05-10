@@ -56,7 +56,8 @@ def make_weighted_sampler(dataset):
 
     labels = np.array(labels)
     class_counts = np.bincount(labels, minlength=labels.max() + 1)
-    # Guard against any breed with zero samples
+    
+    # Check any breed with zero samples
     class_counts = np.where(class_counts == 0, 1, class_counts)
     class_weights = 1.0 / class_counts
     sample_weights = class_weights[labels]

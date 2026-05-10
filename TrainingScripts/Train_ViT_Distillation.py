@@ -99,16 +99,16 @@ os.makedirs(CHECKPOINT_ROOT, exist_ok=True)
 NUM_CLASSES = 37 if LABEL_MODE == "breed" else 2
 
 # ── Data pipeline flags ───────────────────────────────────────────────────────
-USE_CLASS_IMBALANCE = False
-CAT_FRACTION        = 0.3    # ignored when USE_CLASS_IMBALANCE=False
+USE_CLASS_IMBALANCE = True
+CAT_FRACTION        = 0.2    # ignored when USE_CLASS_IMBALANCE=False
 
 USE_STRATIFIED_DATA = False
-DATA_FRACTION       = 0.5    # ignored when USE_STRATIFIED_DATA=False
+DATA_FRACTION       = 1.0  # ignored when USE_STRATIFIED_DATA=False
 
 # ── Strategies ────────────────────────────────────────────────────────────────
 # weighted_ce and oversampling only make sense with imbalanced data.
 # When USE_CLASS_IMBALANCE=False they are automatically dropped.
-_ALL_STRATEGIES = ["baseline", "weighted_ce", "oversampling"]
+_ALL_STRATEGIES = ["oversampling"]
 STRATEGIES = _ALL_STRATEGIES if USE_CLASS_IMBALANCE else ["baseline"]
 
 # ── Student experiment grid ───────────────────────────────────────────────────
@@ -116,9 +116,9 @@ STRATEGIES = _ALL_STRATEGIES if USE_CLASS_IMBALANCE else ["baseline"]
 # checkpoint subdirectory and its own master CSV.
 STUDENT_EXPERIMENTS = {
     "pretrained_gradual": {"pretrained": True,  "gradual_unfreeze": True},
-    "pretrained_full":    {"pretrained": True,  "gradual_unfreeze": False},
-    "scratch_gradual":    {"pretrained": False, "gradual_unfreeze": True},
-    "scratch_full":       {"pretrained": False, "gradual_unfreeze": False},
+    # "pretrained_full":    {"pretrained": True,  "gradual_unfreeze": False},
+    # "scratch_gradual":    {"pretrained": False, "gradual_unfreeze": True},
+    # "scratch_full":       {"pretrained": False, "gradual_unfreeze": False},
 }
 
 # ── Distillation loss weights ─────────────────────────────────────────────────
@@ -505,7 +505,7 @@ if __name__ == "__main__":
 
                 CHECKPOINT_DIR = os.path.join(
                     CHECKPOINT_BASE,
-                    f"{STUDENT_MODEL_NAME}_{training_type}_{LABEL_MODE}_{run_label}",
+                    f"{STUDENT_MODEL_NAME}_{training_type}_{LABEL_MODE}_{run_label}_Data_frac_{DATA_FRACTION}_Cat_frac_{CAT_FRACTION}",
                 )
                 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 

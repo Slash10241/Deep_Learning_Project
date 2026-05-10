@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
+import torch.nn.functional as F
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
@@ -59,14 +60,14 @@ LABEL_MODE      = "breed"
 CHECKPOINT_ROOT = "../Checkpoints/"
 MODEL_NAME    = "vit_tiny_patch16_224"
 TRAINING_TYPE = "ViTTiny_Gradual_Baseline"
-CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT, "vit_tiny_baseline_full_finetune/")
+CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT, "vit_tiny_direct_gradual_full_finetune_20pct_cat/")
 
 os.makedirs(CHECKPOINT_ROOT, exist_ok=True)
 os.makedirs(CHECKPOINT_BASE, exist_ok=True)
 NUM_CLASSES     = 37 if LABEL_MODE == "breed" else 2
-CAT_FRACTION    = 1.0
+CAT_FRACTION    = 0.2
 # STRATEGIES      = ["baseline", "weighted_ce", "oversampling"]
-STRATEGIES      = ["baseline"]
+STRATEGIES      = ["oversampling"]
 
 # Fixed: 3 block groups
 NUM_BLOCKS   = 12

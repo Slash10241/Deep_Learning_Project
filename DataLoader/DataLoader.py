@@ -9,8 +9,6 @@ Label format is controlled by `one_hot=True/False`:
     False (default) — integer class indices, compatible with nn.CrossEntropyLoss
     True            — one-hot float vectors,  compatible with soft-label losses
 
-Train/val split is user-specified (e.g. val_split=0.2 → 80/20).
-Test split uses the official test.txt provided with the dataset.
 """
 
 import os
@@ -62,7 +60,6 @@ class BatchAugmenter:
         idx = torch.randperm(x.size(0))
         _, _, H, W = x.shape
 
-        # bounding box
         cut_ratio = np.sqrt(1 - lam)
         cut_h = int(H * cut_ratio)
         cut_w = int(W * cut_ratio)
@@ -105,7 +102,6 @@ class BatchAugmenter:
 def get_train_transform(augs: dict, image_size: int = 224) -> transforms.Compose:
     pipeline = [transforms.Resize((256, 256))]
 
-    # ── geometric ────────────────────────────────────────────────────────────
     if augs.get("horizontal_flip"):
         pipeline.append(transforms.RandomHorizontalFlip(p=0.5))
 
@@ -123,7 +119,6 @@ def get_train_transform(augs: dict, image_size: int = 224) -> transforms.Compose
     else:
         pipeline.append(transforms.Resize((image_size, image_size)))
 
-    # ── colour ───────────────────────────────────────────────────────────────
     if augs.get("color_jitter"):
         pipeline.append(transforms.ColorJitter(
             brightness=augs.get("jitter_brightness", 0.3),
@@ -132,7 +127,6 @@ def get_train_transform(augs: dict, image_size: int = 224) -> transforms.Compose
             hue=augs.get("jitter_hue", 0.05),
         ))
 
-    # ── regularisation ───────────────────────────────────────────────────────
     if augs.get("grayscale"):
         pipeline.append(transforms.RandomGrayscale(p=augs.get("grayscale_p", 0.05)))
 
@@ -262,10 +256,10 @@ def build_dataloaders(
 
     Args:
         dataset_root : root directory containing images/ and annotations/
-        val_split    : fraction of trainval.txt to use for validation (e.g. 0.2)
+        val_split    : fraction of trainval.txt to use for validation
         batch_size   : number of samples per batch
-        one_hot      : False → integer labels (use with nn.CrossEntropyLoss)
-                       True  → one-hot float labels (use with soft-label losses)
+        one_hot      : False → integer labels
+                       True  → one-hot float labels
         image_size   : spatial resolution fed to the model (default 224)
         num_workers  : DataLoader worker processes
         seed         : random seed for reproducible train/val split
@@ -289,11 +283,11 @@ def build_dataloaders(
         if not p.exists():
             raise FileNotFoundError(f"Expected path not found: {p}")
 
-    # --- parse annotation files ---
+    # parse annotation files
     trainval_records = _parse_annotation_file(str(trainval_txt))
     test_records = _parse_annotation_file(str(test_txt))
 
-    # --- reproducible train / val split ---
+    # reproducible train / val split
     rng = random.Random(seed)
     rng.shuffle(trainval_records)
 
@@ -315,7 +309,7 @@ def build_dataloaders(
         f"y1: species (Cat/Dog) | y2: breed (0–36)"
     )
 
-    # --- datasets ---
+    # datasets
     train_dataset = CreateDataset(
         train_records,
         images_dir,
@@ -335,7 +329,7 @@ def build_dataloaders(
         one_hot=one_hot,
     )
 
-    # --- dataloaders ---
+    # dataloaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
