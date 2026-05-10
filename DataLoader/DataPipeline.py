@@ -13,10 +13,6 @@ from torchvision import datasets, transforms
 
 from DataLoader import CreateDataset, build_dataloaders
 
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
-
 def get_stratified_subsets(dataset, subset_ratios=(1.0, 0.1, 0.01), random_state=42):
     """
     Returns stratified subsets of a dataset.

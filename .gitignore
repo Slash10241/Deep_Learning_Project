@@ -6,3 +6,4 @@ __pycache__
 Checkpoints
 uv.lock
 Training_Notebooks
+embedding_analysis

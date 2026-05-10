@@ -32,6 +32,7 @@ import torch
 import torch.nn as nn
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import DataLoader, Subset
+import torch.nn.functional as F
 
 sys.path.insert(0, "../Models")
 sys.path.insert(0, "../DataLoader")
@@ -72,24 +73,23 @@ LR_FACTOR       = 0.1
 LR_MIN          = 1e-6
 ES_PATIENCE     = 6
 LABEL_MODE      = "breed"
-MODEL_NAME      = "vit_base_patch16_224"
-TRAINING_TYPE   = "LimitedData_Gradual"
+MODEL_NAME      = "vit_tiny_patch16_224"
+TRAINING_TYPE   = "LimitedData_Gradual_ViT_Tiny"
 CHECKPOINT_ROOT = "../Checkpoints/"
 os.makedirs(CHECKPOINT_ROOT, exist_ok=True)
 NUM_CLASSES     = 37 if LABEL_MODE == "breed" else 2
 
 # Fixed: 3 block groups
-NUM_BLOCKS   = 3
+NUM_BLOCKS   = 12
 HEAD_EPOCHS  = 20
-BLOCK_EPOCHS = 20
+BLOCK_EPOCHS = 15
 HEAD_LR      = 1e-3
 BLOCK_LR     = 1e-4
 
-DATA_FRACTIONS = [0.5, 0.25, 0.1]
+DATA_FRACTIONS = [ 0.25, 0.1]
 
 L2_REGIMES = {
-    "wd_standard": 1e-4,
-    "wd_strong":   1e-2,
+    "wd_standard": 1e-4
 }
 
 
@@ -111,7 +111,7 @@ LAST_PHASE_IDX = len(PHASE_SCHEDULE) - 1
 # ─────────────────────────────────────────────────────────────────────────────
 # LOAD AUGMENTATION EXPERIMENTS
 # ─────────────────────────────────────────────────────────────────────────────
-with open("experiments_final.json", "r") as f:
+with open("experiments_final_augs.json", "r") as f:
     exp_config = json.load(f)
 
 FIXED_AUGS = exp_config["fixed"]
@@ -140,6 +140,21 @@ print(f"Total runs     : {total_runs}")
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+class SmartCELoss(nn.Module):
+    def __init__(self, weight=None, smoothing_hard=0.1):
+        super().__init__()
+        self.weight         = weight
+        self.smoothing_hard = smoothing_hard
+
+    def forward(self, logits, labels):
+        smoothing = 0.0 if labels.ndim > 1 else self.smoothing_hard
+        return F.cross_entropy(
+            logits, labels,
+            weight=self.weight,
+            label_smoothing=smoothing,
+        )
+        
 class LabelSelector:
     def __init__(self, loader, mode):
         self.loader = loader
@@ -287,7 +302,7 @@ if __name__ == "__main__":
     for fraction in DATA_FRACTIONS:
         frac_pct        = f"{int(fraction * 100):02d}pct"
         CHECKPOINT_BASE = os.path.join(CHECKPOINT_ROOT,
-                                       f"vit_limited_data_{frac_pct}_gradual/")
+                                       f"{TRAINING_TYPE}_{frac_pct}_gradual/")
         os.makedirs(CHECKPOINT_BASE, exist_ok=True)
 
         print("\n" + "█" * 70)
@@ -332,7 +347,7 @@ if __name__ == "__main__":
                 test_selector  = LabelSelector(test_loader,  LABEL_MODE)
 
                 model           = ViTGradualUnfreeze(num_classes=NUM_CLASSES, model_name=MODEL_NAME)
-                loss_fn         = nn.CrossEntropyLoss(label_smoothing=0.1)
+                loss_fn = SmartCELoss(smoothing_hard=0.1)
                 batch_augmenter = BatchAugmenter(augs=AUGMENTATIONS, num_classes=NUM_CLASSES)
 
                 early_stopping  = EarlyStopping(

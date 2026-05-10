@@ -15,7 +15,10 @@ dependencies = [
     "tqdm",
     "scikit-learn",
     "ipykernel",
-    "jupyter"
+    "jupyter",
+    "seaborn",
+    "umap-learn",
+    "pillow"
 ]
 
 [[tool.uv.index]]
