@@ -11,36 +11,6 @@ class ResNetGradualUnfreeze(nn.Module):
     residual stages from deepest to shallowest:
 
         layer4 -> layer3 -> layer2 -> layer1
-
-    This mirrors the ViT gradual unfreezing strategy while adapting to
-    ResNet's stage-based hierarchy.
-
-    Recommended model for similar parameter count to ViT-Base (~86M):
-        - resnet152 (~60M)
-        - resnet200d (~64M)
-        - resnetrs152 (~83M)
-
-    Example:
-        model = ResNetGradualUnfreeze(
-            num_classes=37,
-            model_name="resnetrs152"
-        )
-
-        # Head only
-        for epoch in range(5):
-            train(...)
-
-        # Gradually unfreeze deeper stages
-        for stage in [4, 3, 2, 1]:
-            model.unfreeze_next_stage(stage)
-
-            optimizer = torch.optim.AdamW(
-                model.trainable_params(),
-                lr=1e-4
-            )
-
-            for epoch in range(3):
-                train(...)
     """
 
     def __init__(
@@ -87,9 +57,6 @@ class ResNetGradualUnfreeze(nn.Module):
             2 -> layer2
             3 -> layer3
             4 -> layer4
-
-        Recommended order:
-            4 -> 3 -> 2 -> 1
 
         Args:
             block_idx: ResNet stage index.

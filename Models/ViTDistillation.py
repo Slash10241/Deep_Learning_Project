@@ -4,60 +4,6 @@ ViTDistillation.py
 Wraps ViT-Base (teacher) and ViT-Tiny (student) for intermediate-layer
 knowledge distillation with a shared-space projector design.
 
-Architecture
-------------
-                    ┌──────────────────────────────────────┐
-                    │           TEACHER  ViT-Base           │
-                    │  block[0..11]  →  [hook @ block[5]]  │
-                    │  embed_dim = 768                      │
-                    └──────────────┬────────────────────────┘
-                                   │  teacher CLS  (B, 768)
-                                   │  frozen random Linear 768 → 256
-                                   │  (JL-style random projection)
-                                   ▼
-                       Cosine similarity loss (only when hook block live)
-                                   ▲
-                    ┌──────────────┴────────────────────────┐
-                    │           STUDENT  ViT-Tiny            │
-                    │  block[0..11]  →  [hook @ block[5]]  │
-                    │  embed_dim = 192                      │
-                    │  student_proj: 192 → 256 (trainable,  │
-                    │  training-only)                       │
-                    └──────────────────────────────────────┘
-
-Projector design
------------------
-  Teacher projector: frozen random Linear (768 → 256, no bias).
-      Initialised N(0, 1/sqrt(PROJ_DIM)) — standard JL scaling that
-      preserves pairwise distances and angular structure in expectation.
-      No gradients, no train/eval difference.
-
-  Student projector: trainable FeatureProjector (192 → 256).
-      Learns to align its CLS token with the fixed random teacher projection.
-      DROPPED at inference — forward() is training-aware.
-
-Feat loss gating
------------------
-  L_feat is only active once the student's hook block (block 5) has been
-  unfrozen.  DistillationEngine forces w_feat=0.0 before that point,
-  preventing the student projector from converging to a stale mapping of
-  frozen representations before block 5 is free to change.
-
-Losses
-------
-  L_total = w_ce   * L_CE      (hard label CE, supports class weights)
-          + w_kl   * L_KL      (KL-divergence on softened logits)
-          + w_mse  * L_MSE     (MSE on raw logits)
-          + w_feat * L_feat    (cosine similarity loss on projected CLS,
-                                0.0 until hook block is unfrozen)
-
-Training loop compatibility
----------------------------
-  TeacherViT always returns (logits, feat_proj).
-  StudentViTTiny is training-aware:
-      student.train() → (logits, feat_proj)
-      student.eval()  → logits only
-
   Use DistillationEngine (DistillationEngine.py) for the training loop.
   Optimizer needs only student.trainable_params() — teacher is fully frozen.
 
@@ -108,11 +54,11 @@ class LossWeights:
     ce_class_weights: optional (C,) tensor for weighted CE when using the
                       weighted_ce strategy with class imbalance. None = uniform.
     """
-    w_ce:             float                  = 0.3
-    w_kl:             float                  = 0.5
-    w_mse:            float                  = 0.1
-    w_feat:           float                  = 0.1
-    temperature:      float                  = 4.0
+    w_ce: float = 0.3
+    w_kl: float = 0.5
+    w_mse: float = 0.1
+    w_feat: float = 0.1
+    temperature: float = 4.0
     ce_class_weights: Optional[torch.Tensor] = field(default=None, compare=False)
 
 
@@ -123,7 +69,7 @@ class FeatureProjector(nn.Module):
     """
     Maps student CLS token (192) to PROJ_DIM (256).
     Architecture: Linear → GELU → LayerNorm → Linear
-    Bottleneck = max(in_dim, out_dim) to avoid low-rank collapse.
+    Bottleneck = max(in_dim, out_dim).
     Training-only — dropped at inference via StudentViTTiny's training-aware forward.
     """
 
@@ -181,30 +127,23 @@ class TeacherViT(nn.Module):
 
     Backbone: fully frozen, always eval.
     Projector: frozen random Linear (768 → PROJ_DIM, no bias, JL scaling).
-        N(0, 1/sqrt(PROJ_DIM)) init preserves norms in expectation.
-        No gradients, no trainable parameters.
 
-    forward() always returns (logits, feat_proj) — no training-aware branching
-    needed since everything is frozen.
-
-    Checkpoint: model.state_dict() from ViTGradualUnfreeze saved by
-    EarlyStopping — all keys prefixed with "backbone.*".
     """
 
     def __init__(
         self,
         checkpoint_path: str,
-        model:       str = TEACHER_MODEL,
+        model: str = TEACHER_MODEL,
         num_classes: int = 37,
-        hook_block:  int = TEACHER_HOOK_BLOCK,
+        hook_block: int = TEACHER_HOOK_BLOCK,
     ):
         super().__init__()
 
         # ── Backbone ──────────────────────────────────────────────────────────
-        backbone  = timm.create_model(model, pretrained=False, num_classes=0)
+        backbone = timm.create_model(model, pretrained=False, num_classes=0)
         embed_dim = backbone.num_features   # 768
 
-        self.backbone      = backbone
+        self.backbone = backbone
         self.backbone.head = nn.Linear(embed_dim, num_classes)
 
         # ── Frozen random projector (JL) ──────────────────────────────────────
@@ -219,9 +158,9 @@ class TeacherViT(nn.Module):
         state = {k.replace("module.", ""): v for k, v in state.items()}
 
         missing, unexpected = self.load_state_dict(state, strict=False)
-        missing_real    = [k for k in missing    if not k.startswith("projector.")]
+        missing_real    = [k for k in missing if not k.startswith("projector.")]
         unexpected_real = [k for k in unexpected if not k.startswith("projector.")]
-        assert not missing_real,    f"[Teacher] Missing backbone keys: {missing_real}"
+        assert not missing_real, f"[Teacher] Missing backbone keys: {missing_real}"
         assert not unexpected_real, f"[Teacher] Unexpected keys: {unexpected_real}"
         print(f"  [Teacher] Checkpoint loaded from {checkpoint_path}")
 
@@ -243,8 +182,8 @@ class TeacherViT(nn.Module):
         """
         self._hook.clear()
         with torch.no_grad():
-            logits    = self.backbone(x)
-            feat_raw  = self._hook.cls_token       # (B, 768)
+            logits = self.backbone(x)
+            feat_raw = self._hook.cls_token       # (B, 768)
             feat_proj = self.projector(feat_raw)   # (B, PROJ_DIM)
         return logits, feat_proj
 
@@ -259,10 +198,6 @@ class TeacherViT(nn.Module):
 class StudentViTTiny(nn.Module):
     """
     ViT-Tiny student for knowledge distillation.
-
-    Training-aware forward:
-        model.train() → (logits (B, C), feat_proj (B, PROJ_DIM))
-        model.eval()  → logits (B, C)  [projector skipped, zero overhead]
 
     Args
     ----

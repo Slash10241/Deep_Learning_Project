@@ -26,7 +26,7 @@ from torchvision import transforms
 NUM_BREEDS = 37
 NUM_SPECIES = 2  # 0 = Cat, 1 = Dog
 
-# ImageNet stats — standard for pretrained ViT / ResNet fine-tuning
+# ImageNet stats — standard for pretrained ViT
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
 
@@ -224,8 +224,8 @@ class CreateDataset(Dataset):
             y1 = F.one_hot(species_idx, num_classes=NUM_SPECIES).float()  # (2,)
             y2 = F.one_hot(breed_idx, num_classes=NUM_BREEDS).float()  # (37,)
         else:
-            y1 = species_idx  # scalar long tensor
-            y2 = breed_idx  # scalar long tensor
+            y1 = species_idx
+            y2 = breed_idx 
 
         return image, (y1, y2)
 

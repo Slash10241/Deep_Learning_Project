@@ -4,7 +4,7 @@ embedding_analysis.py
 Analyses and compares ViT-Base (teacher) and ViT-Tiny (student) embeddings
 on the Oxford-IIIT Pet test set.
 
-Outputs (all written to OUTPUT_DIR)
+Outputs
 -------------------------------------
 1. umap_overview.png
    UMAP of ALL test embeddings for both models, coloured by class.
@@ -12,26 +12,9 @@ Outputs (all written to OUTPUT_DIR)
 
 2. umap_correctness.png
    UMAP coloured by prediction outcome:
-     • Teacher ✓ Student ✓   (both correct)
-     • Teacher ✓ Student ✗   (teacher recovers, student fails — the key group)
-     • Teacher ✗ Student ✓   (student-only correct)
-     • Both ✗
 
-3. correct_gallery_{class_idx}.png  (one per class)
-   3 example images correctly classified by BOTH teacher and student,
-   with their top-3 softmax predictions shown.
-
-4. student_wrong_gallery_{class_idx}.png  (one per class, when examples exist)
-   3 example images where student is WRONG but teacher is RIGHT,
-   with teacher and student top-3 predictions shown side by side.
-
-5. embedding_stats.csv
+3. embedding_stats.csv
    Per-class summary: n_correct_both, n_teacher_only, n_student_only, n_both_wrong.
-
-Usage
------
-Edit the CONFIG section below then run:
-    python embedding_analysis.py
 """
 
 import os
@@ -59,7 +42,7 @@ from DataLoader    import (CreateDataset, get_eval_transform,
 from ViTDistillation import TeacherViT, StudentViTTiny
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONFIG — edit these paths
+# CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 DATASET_ROOT   = "../../../Dataset/"
 TEACHER_CKPT   = "../Checkpoints/Best_Teacher/vit_base_patch16_224_Gradual_Unfreeze_Multiple_breed_blocks3_erasing_jitter_mixup_cutmix_low_prob/checkpoint.pt"
@@ -69,13 +52,11 @@ NUM_CLASSES    = 37
 IMAGE_SIZE     = 224
 BATCH_SIZE     = 64
 NUM_WORKERS    = 0
-N_EXAMPLES     = 3       # examples to show per class per gallery type
+N_EXAMPLES     = 3 
 UMAP_N_NEIGHBORS = 30
 UMAP_MIN_DIST    = 0.1
 UMAP_RANDOM_STATE = 42
 
-# Optional: path to a breed name mapping JSON {"0": "Abyssinian", ...}
-# If None, class indices are used as labels.
 BREED_NAMES_PATH = None
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -126,6 +107,7 @@ print("\nLoading teacher ViT-Base ...")
 teacher = TeacherViT(checkpoint_path=TEACHER_CKPT, num_classes=NUM_CLASSES)
 teacher.to(device)
 teacher.eval()
+        
 # Teacher hook on backbone.norm (final CLS after norm)
 teacher_hook = CLSHook(teacher.backbone.norm)
 
@@ -139,12 +121,13 @@ for p in student.parameters():
     
 student.to(device)
 student.eval()
+
 # Student hook on backbone.norm
 student_hook = CLSHook(student.backbone.norm)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEST DATASET (no augmentation, no LabelSelector — we need raw images too)
+# TEST DATASET
 # ─────────────────────────────────────────────────────────────────────────────
 root       = Path(DATASET_ROOT)
 images_dir = root / "images"
@@ -152,13 +135,12 @@ test_txt   = root / "annotations" / "test.txt"
 
 test_records = _parse_annotation_file(str(test_txt))
 
-# Dataset with eval transform — returns (image_tensor, (species, breed))
 test_dataset = CreateDataset(
     test_records, images_dir,
     transform=get_eval_transform(IMAGE_SIZE), one_hot=False,
 )
 
-# Raw image dataset for gallery display (no transform — PIL images)
+# Raw image dataset for gallery display
 class RawImageDataset(torch.utils.data.Dataset):
     def __init__(self, records, images_dir):
         self.records    = records
@@ -211,15 +193,15 @@ with torch.inference_mode():
 
         # ── Teacher ──────────────────────────────────────────────────────────
         teacher_hook.clear()
-        t_logits = teacher.backbone(x)          # (B, C) — plain forward
-        t_cls    = teacher_hook.feat            # (B, 768)
+        t_logits = teacher.backbone(x)
+        t_cls    = teacher_hook.feat 
         t_probs  = F.softmax(t_logits, dim=-1).cpu()
         t_preds  = t_logits.argmax(dim=-1).cpu()
 
-        # ── Student (eval mode — plain logits) ───────────────────────────────
+        # ── Student  ───────────────────────────────
         student_hook.clear()
-        s_logits = student(x)                   # (B, C)
-        s_cls    = student_hook.feat            # (B, 192)
+        s_logits = student(x) 
+        s_cls    = student_hook.feat
         s_probs  = F.softmax(s_logits, dim=-1).cpu()
         s_preds  = s_logits.argmax(dim=-1).cpu()
 
@@ -234,16 +216,16 @@ with torch.inference_mode():
 teacher_hook.remove()
 student_hook.remove()
 
-teacher_embeds = torch.cat(teacher_embeds).numpy()    # (N, 768)
-student_embeds = torch.cat(student_embeds).numpy()    # (N, 192)
-teacher_probs  = torch.cat(teacher_probs_all).numpy() # (N, 37)
+teacher_embeds = torch.cat(teacher_embeds).numpy() 
+student_embeds = torch.cat(student_embeds).numpy()  
+teacher_probs  = torch.cat(teacher_probs_all).numpy() 
 student_probs  = torch.cat(student_probs_all).numpy()
-teacher_preds  = torch.cat(teacher_preds_all).numpy() # (N,)
+teacher_preds  = torch.cat(teacher_preds_all).numpy()
 student_preds  = torch.cat(student_preds_all).numpy()
-true_labels    = torch.cat(true_labels_all).numpy()   # (N,)
+true_labels    = torch.cat(true_labels_all).numpy()
 
 N = len(true_labels)
-teacher_correct = (teacher_preds == true_labels)  # (N,) bool
+teacher_correct = (teacher_preds == true_labels)
 student_correct = (student_preds  == true_labels)
 
 # Outcome categories
@@ -274,7 +256,7 @@ reducer_t = umap.UMAP(
     random_state=UMAP_RANDOM_STATE,
     metric="cosine",
 )
-teacher_2d = reducer_t.fit_transform(teacher_scaled)   # (N, 2)
+teacher_2d = reducer_t.fit_transform(teacher_scaled)
 
 print("Fitting UMAP on student embeddings ...")
 student_scaled = StandardScaler().fit_transform(student_embeds)
@@ -285,7 +267,7 @@ reducer_s = umap.UMAP(
     random_state=UMAP_RANDOM_STATE,
     metric="cosine",
 )
-student_2d = reducer_s.fit_transform(student_scaled)   # (N, 2)
+student_2d = reducer_s.fit_transform(student_scaled)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PLOT 1 — UMAP overview: coloured by class, teacher vs student side by side
@@ -318,7 +300,6 @@ for ax, pts, name in [
     for spine in ax.spines.values():
         spine.set_linewidth(0.5)
 
-# Shared legend on the right
 handles = [
     mpatches.Patch(color=colors_all[i], label=BREED_NAMES[i])
     for i in range(NUM_CLASSES)
@@ -546,10 +527,7 @@ print(f"\n✔ embedding_stats.csv saved to {stats_path}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BONUS PLOT — embedding distance analysis
-# Per-class: mean cosine distance between teacher and student embeddings
-# (after normalisation) — a proxy for how different their internal
-# representations are per breed
+# embedding distance analysis
 # ─────────────────────────────────────────────────────────────────────────────
 print("Saving embedding_distance_per_class.png ...")
 
@@ -569,7 +547,6 @@ for cls in range(NUM_CLASSES):
         continue
     t_cls_vecs = teacher_norm[mask]
     s_cls_vecs = student_norm[mask]
-    # Mean pairwise cosine similarity = proxy for cluster compactness
     t_sim = (t_cls_vecs @ t_cls_vecs.T).mean()
     s_sim = (s_cls_vecs @ s_cls_vecs.T).mean()
     teacher_compactness.append(float(t_sim))

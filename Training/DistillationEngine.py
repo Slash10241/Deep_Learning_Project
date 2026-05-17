@@ -1,20 +1,11 @@
 """
 DistillationEngine.py
 =====================
-Drop-in replacement for TrainingEngine from TrainingEngine.py.
-Handles the distillation-specific forward (tuple unpacking, teacher call,
-composite loss) while keeping identical interface and behaviour otherwise.
-
-Key differences vs TrainingEngine
-----------------------------------
-  • Runs teacher.forward() each step (fully frozen, inside no_grad)
-  • Unpacks (logits, feat_proj) from student train-mode forward
-  • Computes distillation_loss() instead of a plain loss_fn call
-  • Feat loss gating: w_feat is forced to 0.0 until the student's hook
-    block is in _unfrozen_blocks, preventing the projector from learning
-    a stale mapping before block 5 is free to change
-  • evaluate() uses CE-only loss (student in eval mode → plain logits,
-    no teacher needed), consistent with LR scheduler and early stopping
+  Runs teacher.forward() each step (fully frozen, inside no_grad)
+  Unpacks (logits, feat_proj) from student train-mode forward
+  Computes distillation_loss() instead of a plain loss_fn call
+  Feat loss gating: w_feat is forced to 0.0 until the student's hook block is in _unfrozen_blocks
+  evaluate() uses CE-only loss (student in eval mode → plain logits, no teacher needed)
 
 Optimizer note
 --------------
@@ -92,11 +83,9 @@ def distillation_loss(
     l_mse = F.mse_loss(student_logits, teacher_logits.detach())
 
     # ── L_feat — cosine similarity loss ──────────────────────────────────────
-    # Skipped when w_feat=0.0 (hook block not yet unfrozen) to avoid wasting
-    # compute and to prevent the projector training on frozen representations.
     if weights.w_feat > 0.0:
         cos_sim = F.cosine_similarity(student_feat, teacher_feat.detach(), dim=-1)
-        l_feat  = (1 - cos_sim).mean()   # bounded [0, 2], 0 = perfectly aligned
+        l_feat  = (1 - cos_sim).mean() 
     else:
         l_feat = torch.tensor(0.0, device=student_logits.device)
 
@@ -125,12 +114,6 @@ def distillation_loss(
 class DistillationEngine:
     """
     Training + evaluation engine for knowledge distillation.
-
-    Mirrors TrainingEngine exactly:
-        • AMP + GradScaler
-        • Scheduler overflow guard (skip step on grad spike)
-        • tqdm progress bar + print_freq step logging
-        • evaluate() returns same dict (epoch_loss, epoch_acc, macro_f1, ...)
 
     Args
     ----
