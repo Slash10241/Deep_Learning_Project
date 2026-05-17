@@ -18,7 +18,8 @@ dependencies = [
     "jupyter",
     "seaborn",
     "umap-learn",
-    "pillow"
+    "pillow",
+    "fvcore"
 ]
 
 [[tool.uv.index]]
